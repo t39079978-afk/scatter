@@ -1,20 +1,7 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
+import plotly.express as px
 import numpy as np
-import platform
-
-
-def set_korean_font():
-    """
-    운영체제별 한글 폰트 설정
-    """
-    sys_name = platform.system()
-    if sys_name == "Windows":
-        plt.rc('font', family='Malgun Gothic')
-    elif sys_name == "Darwin":
-        plt.rc('font', family='AppleGothic')
-    plt.rcParams['axes.unicode_minus'] = False
 
 
 def load_data():
@@ -37,24 +24,25 @@ def display_preview(df):
 
 def display_group_statistics(df, group_col, target_col):
     """
-    선택한 그룹별로 타겟 변수의 평균값과 중앙값을 계산하여 표로 출력
+    그룹별 통계 요약 (평균, 중앙값) 출력
     """
     st.subheader(f"그룹별 통계 요약 ({group_col} 기준)")
 
-    # 그룹별 평균과 중앙값 계산
+    # 통계량 계산
     stats_df = df.groupby(group_col)[target_col].agg(['mean', 'median', 'count']).reset_index()
     stats_df.columns = [group_col, '평균값', '중앙값', '데이터 개수']
-
-    # 소수점 둘째자리까지 반올림
     stats_df = stats_df.round(2)
 
     st.table(stats_df)
-    st.write(f"보고서 가이드: {group_col} 항목 중 평균값이 가장 높은 그룹은 **{stats_df.loc[stats_df['평균값'].idxmax(), group_col]}**입니다.")
+
+    # 인사이트 자동 추출
+    max_group = stats_df.loc[stats_df['평균값'].idxmax(), group_col]
+    st.info(f"분석 보고서 가이드: {group_col} 중 평균값이 가장 높은 그룹은 **{max_group}**입니다.")
 
 
 def run_analysis(df):
     """
-    변수 선택, 산점도 시각화, 추세선 및 그룹 통계 생성 함수
+    Plotly를 이용한 시각화 (배포 시 한글 깨짐 방지 버전)
     """
     st.divider()
     st.subheader("변수 선택 및 분석 설정")
@@ -75,37 +63,27 @@ def run_analysis(df):
         group_col = st.selectbox("그룹화 기준 (범주)", all_cols)
 
     if st.button("분석 보고서 생성"):
-        # 1. 시각화 (산점도 및 추세선)
-        set_korean_font()
-        fig, ax = plt.subplots(figsize=(10, 6))
+        # 1. Plotly 산점도 및 추세선
+        # trendline="ols" 옵션은 선형 회귀 분석을 자동으로 수행합니다.
+        fig = px.scatter(
+            df, x=x_col, y=y_col, color=group_col,
+            trendline="ols",
+            title=f"[{x_col}]과(와) [{y_col}]의 관계 분석",
+            labels={x_col: x_col, y_col: y_col},
+            template="plotly_white"
+        )
 
-        groups = df[group_col].unique()
-        for g in groups:
-            subset = df[df[group_col] == g]
-            ax.scatter(subset[x_col], subset[y_col], label=g, alpha=0.7)
+        # 차트 출력 (use_container_width=True로 화면에 꽉 차게)
+        st.plotly_chart(fig, use_container_width=True)
 
-        # 전체 추세선 계산
-        z = np.polyfit(df[x_col], df[y_col], 1)
-        p = np.poly1d(z)
-        x_range = np.linspace(df[x_col].min(), df[x_col].max(), 100)
-        ax.plot(x_range, p(x_range), "r--", linewidth=2, label="전체 추세선")
-
-        ax.set_title(f"[{x_col}]과(와) [{y_col}]의 관계 분석", fontsize=14)
-        ax.set_xlabel(x_col)
-        ax.set_ylabel(y_col)
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-        st.pyplot(fig)
-
-        # 2. 그룹별 통계 데이터 출력 (평균, 중앙값)
+        # 2. 그룹별 통계 데이터
         st.divider()
         display_group_statistics(df, group_col, y_col)
 
-        # 3. 상관관계 요약
+        # 3. 전체 상관관계 요약
         st.divider()
         corr_val = df[x_col].corr(df[y_col])
-        st.write(f"**전체 상관계수:** {corr_val:.4f}")
-        st.write(f"**분석 요약:** X축({x_col})과 Y축({y_col})은 통계적으로 유의미한 관계를 형성하고 있습니다.")
+        st.write(f"**전체 데이터 상관계수:** {corr_val:.4f}")
 
 
 def main():
@@ -113,7 +91,7 @@ def main():
     메인 실행 흐름
     """
     st.set_page_config(page_title="변수 관계 분석기", layout="wide")
-    st.title("변수 관계 시각화 및 그룹별 통계 분석기")
+    st.title("변수 관계 시각화 및 보고서 분석기")
 
     df = load_data()
 
